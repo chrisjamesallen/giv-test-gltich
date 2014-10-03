@@ -155,7 +155,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
     },
 
     setTexture: function (url) {
-      this.texture = new Texture({"url":url||this.DEFAULT_TEX_PATH});
+      this.texture = new Texture({"url":url||this.DEFAULT_TEX_PATH, gl: this.gl});
     },
 
     callbacks: {
@@ -166,7 +166,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
         this.setTexture();
         this.openVAO();
         this.setMeshToInput('vertexPos', this.VERTICES, 3);
-        this.setMeshToInput('texCoord',this.tex.COORDS, 2);
+        this.setMeshToInput('aTextureCoord',this.texture.COORDS, 2);
 
         this.closeVAO();
 
@@ -188,6 +188,11 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
         //point to uniform
         var color = vec4.fromValues(1,0,0,1);
         gl.uniform4fv(this.glGetUniform('color'),  color);
+        //texture
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.texture.tex);
+        gl.uniform1i(gl.getUniformLocation(this.program, "uSampler"), 0);
+        //draw data
         gl.drawArrays(gl.TRIANGLES, 0,this.verticesCount);
         //this.ext.bindVertexArrayOES(null);
       }
