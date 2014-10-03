@@ -4,12 +4,57 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
   window.requestAnimationFrame = window.requestAnimationFrame || window.mozRequestAnimationFrame ||
       window.webkitRequestAnimationFrame || window.oRequestAnimationFrame;
 
+  var Texture = Marionette.Object.extend({
+
+    COORDS : [
+      // Front
+      0.0,  0.0,
+      1.0,  0.0,
+      1.0,  1.0,
+      0.0,  1.0
+    ],
+
+
+  initialize: function (options) {
+      this.url = options.url;
+      this.gl = options.gl;
+      this.tex =  this.gl.createTexture();
+      this.loadURL(this.url);
+    },
+
+    loadURL: function(url){
+      var img;
+      img = new Image(url);
+      this.img = img;
+      img.onLoad = _.bind(this.callbacks.onLoad,this);
+      img.src = url;
+    },
+
+    callbacks:{
+      onLoad: function () {
+        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.img);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+//        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); //gl.NEAREST is also allowed, instead of gl.LINEAR, as neither mipmap.
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Prevents s-coordinate wrapping (repeating).
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); //Prevents t-coordinate wrapping (repeating).
+        gl.generateMipmap(gl.TEXTURE_2D);
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+    }
+
+  });
+
+
+
   var Object = Marionette.Object.extend({
 
     VERTICES_: [.5, .5, 0,   -.5, .5, 0,    .5, -.5, 0,    -.5, -.5, 0   ],
     VERTICES: [ /* bottom triangle */  -1,-1,0, 1, -1, 0,   1, 1, 0, /*top triangle*/-1,-1,0,  -1,1,0, 1,1,0  ],
     FRAGMENT_GLSL_PATH: 'scripts/shaders/default/frag.glsl',
     VERTICES_GLSL_PATH: 'scripts/shaders/default/vert.glsl',
+    DEFAULT_TEX_PATH: 'assets/images/hed.jpg',
 
     initialize: function (options) {
       this.gl = options.gl;
@@ -71,9 +116,8 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       this.program = prog;
     },
 
-
-
     openVAO: function () {
+
       var vao, vbo, ext, gl;
       gl = this.gl;
       this.ext = ext = (!this.ext)? gl.getExtension("OES_vertex_array_object"): this.ext;
@@ -82,6 +126,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
     },
 
     closeVAO: function () {
+
       this.ext.bindVertexArrayOES(null);
     },
 
@@ -97,7 +142,6 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       return loc;
     },
 
-
     setMeshToInput: function(attribute,data,perVert){
       var positionAttrib, gl, vbo, ext;
       gl = this.gl;
@@ -110,14 +154,22 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       gl.vertexAttribPointer(positionAttrib, perVert|| 3, gl.FLOAT, false, 0, 0);
     },
 
+    setTexture: function (url) {
+      this.texture = new Texture({"url":url||this.DEFAULT_TEX_PATH});
+    },
+
     callbacks: {
       onLoadedGLSL: function () {
         this.createShaderType(this.glsl.vert, 'vert');
         this.createShaderType(this.glsl.frag, 'fragment');
         this.createProgram();
+        this.setTexture();
         this.openVAO();
         this.setMeshToInput('vertexPos', this.VERTICES, 3);
+        this.setMeshToInput('texCoord',this.tex.COORDS, 2);
+
         this.closeVAO();
+
         this.isLoaded = true;
       }
     },
@@ -141,8 +193,6 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       }
 
     }
-
-
   });
 
   module.Square = Object;
