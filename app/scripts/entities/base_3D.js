@@ -23,6 +23,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       this.url = options.url;
       this.gl = options.gl;
       this.tex = this.gl.createTexture();
+
     },
 
     loadURL: function (url) {
@@ -57,6 +58,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       this.$video.attr('src',this.url);
     },
     loadURL: function (url) {
+
       var $video = this.$video;
       $video.attr('src',url|| this.url);
       $video[0].addEventListener('playing', _.bind(this.callbacks.onLoad,this));
@@ -94,12 +96,12 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       this.gl = options.gl;
       this.glsl = {};
       this.isLoaded = false;
-      this.texture = options.texture;
+      this.textures = options.textures;
       this.verticesCount = this.VERTICES.length / 3;
-      this.loadShaderFiles();
+
     },
 
-    loadShaderFiles: function () {
+    load: function () {
       var self = this;
       $.get(self.VERTICES_GLSL_PATH, function (data) {
         self.glsl.vert = {};
@@ -131,6 +133,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
 
       if (!gl.getShaderParameter(obj.shader, gl.COMPILE_STATUS)) {
         console.warn("gl error", gl.getShaderInfoLog(obj.shader));
+        this.isLoaded = false;
         return null;
       }
     },
@@ -147,6 +150,8 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       // check compilation
       if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
         console.error('fail with shaders');
+        window.stop();
+        this.isLoaded = false;
       }
       this.program = prog;
     },
@@ -192,14 +197,17 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
 
     callbacks: {
       onLoadedGLSL: function () {
+
         this.createShaderType(this.glsl.vert, 'vert');
         this.createShaderType(this.glsl.frag, 'fragment');
         this.createProgram();
         this.openVAO();
         this.setMeshToInput('vertexPos', this.VERTICES, 3);
-        this.setMeshToInput('aTextureCoord', this.texture.COORDS, 2);
+        this.setMeshToInput('aTextureCoord', _.last(this.textures).COORDS, 2);
         this.closeVAO();
-        this.texture.loadURL();
+        _.each(this.textures, function(tex){
+          tex.loadURL();
+        });
         this.isLoaded = true;
       }
     },
@@ -215,22 +223,24 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       this.texture = new Texture({"url": url || this.DEFAULT_TEX_PATH, gl: this.gl});
     },
 
-    draw: function () {
-      if (this.isLoaded && this.texture.isLoaded) {
+    draw: function (time) {
+      if (this.isLoaded && _.last(this.textures).isLoaded) {
         this.gl.useProgram(this.program);
         this.ext.bindVertexArrayOES(this.vao);
         //point to uniform
         var color = vec4.fromValues(1, 0, 0, 1);
         gl.uniform4fv(this.glGetUniform('color'), color);
-        //texture
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.texture.tex);
-        //gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.texture.el);
+        var self = this;
+        _.each(this.textures, function(tex, index){
+          gl.activeTexture(gl['TEXTURE'+index]);
+          gl.bindTexture(gl.TEXTURE_2D, tex.tex);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tex.el);
+          var loc = gl.getUniformLocation(self.program, "sampler"+index);
+          gl.uniform1i(loc, index);
+        });
 
-
-        var loc = gl.getUniformLocation(this.program, "uSampler");
-        gl.uniform1i(loc, 0);
+        var loc = gl.getUniformLocation(self.program, "u_time");
+        gl.uniform1f(loc, time);
         //draw data
         gl.drawArrays(gl.TRIANGLES, 0, this.verticesCount);
         //this.ext.bindVertexArrayOES(null);
@@ -292,9 +302,9 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
         if (this.AUTOPLAY) this.setRunLoop();
       },
 
-      onUpdate: function () {
-        this._update();
-        this._draw();
+      onUpdate: function (time) {
+        this._update(time);
+        this._draw(time);
         if (this.run) {
           window.requestAnimationFrame(_.bind(this.onUpdate, this));
         }
@@ -304,16 +314,17 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       }
     },
 
-    _update: function () {
+    _update: function (time) {
       // now mac does swap buffer for us..., need to implement here
-      this.obj.update();
+      this.obj.update(time);
     },
 
-    _draw: function () {
+    _draw: function (time) {
+
       var gl = this.gl;
       gl.clearColor(0, 0, 0, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
-      this.obj.draw();
+      this.obj.draw(time);
     },
 
     // Public
