@@ -6,61 +6,96 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
 
   var Texture = Marionette.Object.extend({
 
-    COORDS : [
-      // Front
-      0.0,  0.0,
-      1.0,  0.0,
-      1.0,  1.0,
-      0.0,  1.0
+    COORDS: [
+
+      /*t:*/ 1.0, 1.0, //top right
+      /*t:*/ 1.0, 0.0, //bottom right
+      /*t:*/ 0.0, 0.0, //bottomleft
+
+      /*t:*/ 0.0, 0.0, //bottomleft
+      /*t:*/ 0.0, 1.0, //top left
+      /*t:*/ 1.0, 1.0 //top right
+
     ],
 
 
-  initialize: function (options) {
+    initialize: function (options) {
       this.url = options.url;
       this.gl = options.gl;
-      this.tex =  this.gl.createTexture();
-      this.loadURL(this.url);
+      this.tex = this.gl.createTexture();
     },
 
-    loadURL: function(url){
+    loadURL: function (url) {
       var img;
-      img = new Image(url);
-      this.img = img;
-      img.onLoad = _.bind(this.callbacks.onLoad,this);
-      img.src = url;
+      img = new Image();
+      this.el = img;
+      img.onload = _.bind(this.callbacks.onLoad, this);
+      img.src = url || this.url;
     },
 
-    callbacks:{
+    callbacks: {
       onLoad: function () {
+        this.isLoaded = true;
         gl.bindTexture(gl.TEXTURE_2D, this.tex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.img);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
-//        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); //gl.NEAREST is also allowed, instead of gl.LINEAR, as neither mipmap.
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); //Prevents s-coordinate wrapping (repeating).
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); //Prevents t-coordinate wrapping (repeating).
-        gl.generateMipmap(gl.TEXTURE_2D);
+       // gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.el);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+       // gl.generateMipmap(gl.TEXTURE_2D);
         gl.bindTexture(gl.TEXTURE_2D, null);
       }
     }
 
   });
 
+  var VideoTexture = Texture.extend({
+    initialize: function (options) {
+      this.url = options.url;
+      this.gl = options.gl;
+      this.tex = this.gl.createTexture();
+      this.$video = $('<video>').appendTo($('body'));
+      this.$video.attr('src',this.url);
+    },
+    loadURL: function (url) {
+      var $video = this.$video;
+      $video.attr('src',url|| this.url);
+      $video[0].addEventListener('playing', _.bind(this.callbacks.onLoad,this));
+      $video[0].play();
+      $video.prop('muted',true);
+      $video.prop('loop',true);
+      this.el = $video[0];
+      return $video;
+    }
 
+  });
+
+
+  // 3d Object
 
   var Object = Marionette.Object.extend({
 
-    VERTICES_: [.5, .5, 0,   -.5, .5, 0,    .5, -.5, 0,    -.5, -.5, 0   ],
-    VERTICES: [ /* bottom triangle */  -1,-1,0, 1, -1, 0,   1, 1, 0, /*top triangle*/-1,-1,0,  -1,1,0, 1,1,0  ],
+    VERTICES_: [.5, .5, 0, -.5, .5, 0, .5, -.5, 0, -.5, -.5, 0   ],
+    VERTICES__: [ /* bottom triangle */  -1, -1, 0, 1, 1, 0, 1, -1, 0, /*top triangle*/-1, -1, 0, -1, 1, 0, 1, 1, 0  ],
+    VERTICES: [
+      /*v:*/-1.000000, -1.000000, -0.000000,
+      /*v:*/-1.000000, 1.000000, -0.000000,
+      /*v:*/1.000000, 1.000000, -0.000000,
+
+      /*v:*/1.000000, 1.000000, -0.000000,
+      /*v:*/1.000000, -1.000000, -0.000000,
+      /*v:*/-1.000000, -1.000000, -0.000000
+    ],
+
     FRAGMENT_GLSL_PATH: 'scripts/shaders/default/frag.glsl',
     VERTICES_GLSL_PATH: 'scripts/shaders/default/vert.glsl',
-    DEFAULT_TEX_PATH: 'assets/images/hed.jpg',
+    DEFAULT_TEX_PATH: 'assets/images/hed_.jpg',
 
     initialize: function (options) {
       this.gl = options.gl;
       this.glsl = {};
       this.isLoaded = false;
-      this.verticesCount = this.VERTICES.length/3;
+      this.texture = options.texture;
+      this.verticesCount = this.VERTICES.length / 3;
       this.loadShaderFiles();
     },
 
@@ -73,7 +108,7 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
         $.get(self.FRAGMENT_GLSL_PATH, _.bind(function (data) {
           this.glsl.frag = {};
           this.glsl.frag.src = data;
-          _.bind(this.callbacks.onLoadedGLSL,this)();
+          _.bind(this.callbacks.onLoadedGLSL, this)();
         }, self));
 
       });
@@ -120,8 +155,8 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
 
       var vao, vbo, ext, gl;
       gl = this.gl;
-      this.ext = ext = (!this.ext)? gl.getExtension("OES_vertex_array_object"): this.ext;
-      this.vao = vao = (!this.vao)? this.ext.createVertexArrayOES(): this.vao;
+      this.ext = ext = (!this.ext) ? gl.getExtension("OES_vertex_array_object") : this.ext;
+      this.vao = vao = (!this.vao) ? this.ext.createVertexArrayOES() : this.vao;
       ext.bindVertexArrayOES(vao);
     },
 
@@ -132,30 +167,27 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
 
     getAttribute: function (key) {
       var loc = this.gl.getAttribLocation(this.program, key);
-      if(loc == -1) console.warn('error getting attribute',key);
+      if (loc == -1) console.warn('error getting attribute', key);
       return loc;
     },
 
     glGetUniform: function (key) {
       var loc = this.gl.getUniformLocation(this.program, key);
-      if(loc == -1) console.warn('error getting uniform',key);
+      if (loc == -1) console.warn('error getting uniform', key);
       return loc;
     },
 
-    setMeshToInput: function(attribute,data,perVert){
+    setMeshToInput: function (attribute, data, perVert) {
       var positionAttrib, gl, vbo, ext;
       gl = this.gl;
-      ext =this.ext;
+      ext = this.ext;
       vbo = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.DYNAMIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
       positionAttrib = this.getAttribute(attribute);//grab array loc
+      console.log('attrib', attribute, positionAttrib);
       gl.enableVertexAttribArray(positionAttrib);//place in here attribute position.
-      gl.vertexAttribPointer(positionAttrib, perVert|| 3, gl.FLOAT, false, 0, 0);
-    },
-
-    setTexture: function (url) {
-      this.texture = new Texture({"url":url||this.DEFAULT_TEX_PATH, gl: this.gl});
+      gl.vertexAttribPointer(positionAttrib, perVert || 2, gl.FLOAT, false, 0, 0);
     },
 
     callbacks: {
@@ -163,13 +195,11 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
         this.createShaderType(this.glsl.vert, 'vert');
         this.createShaderType(this.glsl.frag, 'fragment');
         this.createProgram();
-        this.setTexture();
         this.openVAO();
         this.setMeshToInput('vertexPos', this.VERTICES, 3);
-        this.setMeshToInput('aTextureCoord',this.texture.COORDS, 2);
-
+        this.setMeshToInput('aTextureCoord', this.texture.COORDS, 2);
         this.closeVAO();
-
+        this.texture.loadURL();
         this.isLoaded = true;
       }
     },
@@ -181,25 +211,125 @@ window.app.module("Entities", function (module, app, Backbone, Marionette, $, _)
       // place matrices in here
     },
 
+    setTexture: function (url) {
+      this.texture = new Texture({"url": url || this.DEFAULT_TEX_PATH, gl: this.gl});
+    },
+
     draw: function () {
-      if(this.isLoaded){
+      if (this.isLoaded && this.texture.isLoaded) {
         this.gl.useProgram(this.program);
         this.ext.bindVertexArrayOES(this.vao);
         //point to uniform
-        var color = vec4.fromValues(1,0,0,1);
-        gl.uniform4fv(this.glGetUniform('color'),  color);
+        var color = vec4.fromValues(1, 0, 0, 1);
+        gl.uniform4fv(this.glGetUniform('color'), color);
         //texture
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, this.texture.tex);
-        gl.uniform1i(gl.getUniformLocation(this.program, "uSampler"), 0);
+        //gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.texture.el);
+
+
+        var loc = gl.getUniformLocation(this.program, "uSampler");
+        gl.uniform1i(loc, 0);
         //draw data
-        gl.drawArrays(gl.TRIANGLES, 0,this.verticesCount);
+        gl.drawArrays(gl.TRIANGLES, 0, this.verticesCount);
         //this.ext.bindVertexArrayOES(null);
       }
 
     }
   });
 
-  module.Square = Object;
 
+  // 3d view
+
+  var CanvasView = Marionette.ItemView.extend({
+
+    AUTOPLAY: true,
+
+    class: 'container-canvas',
+    tagName: 'canvas',
+
+    initialize: function () {
+      this.delegateChannelEvents();
+    },
+
+    setEvents: function () {
+      var $w = $(window);
+      $w.on('resize', this.callbacks.events.onResize);
+    },
+
+    setContext: function () {
+      this.gl = this.el.getContext("experimental-webgl");
+      window.gl = this.gl;
+    },
+
+    setViewport: function () {
+      this.gl.viewport(0, 0, this.el.width, this.el.height);
+    },
+
+    setRunLoop: function () {
+      requestAnimationFrame(_.bind(this.onUpdate, this));
+    },
+
+    setObject: function () {
+    },
+
+    callbacks: {
+
+      onRender: function () {
+        this.setContext();
+        this.el.width = 1000;
+        this.el.height = 642;
+        this.makeCenter();
+        this.setViewport();
+        this.setEvents();
+        this.setObject();
+        console.log('CanvasView>> gl context', this.gl);
+      },
+
+      onShow: function () {
+        this.run = true;
+        if (this.AUTOPLAY) this.setRunLoop();
+      },
+
+      onUpdate: function () {
+        this._update();
+        this._draw();
+        if (this.run) {
+          window.requestAnimationFrame(_.bind(this.onUpdate, this));
+        }
+      },
+      onResize: function () {
+        this.setViewport();
+      }
+    },
+
+    _update: function () {
+      // now mac does swap buffer for us..., need to implement here
+      this.obj.update();
+    },
+
+    _draw: function () {
+      var gl = this.gl;
+      gl.clearColor(0, 0, 0, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      this.obj.draw();
+    },
+
+    // Public
+    start: function () {
+      this.run = true;
+      this.setRunLoop();
+    },
+    stop: function () {
+      this.run = false;
+    }
+  });
+
+
+
+  module.Plane = Object;
+  module.Canvas = CanvasView;
+  module.ImageTexture = Texture;
+  module.VideoTexture = VideoTexture;
 });
